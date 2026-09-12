@@ -15,8 +15,12 @@
     <sdpi-item label="Shuffle">
         <sdpi-checkbox setting="shuffle" label="Shuffle Playlist"></sdpi-checkbox>
     </sdpi-item>
-    <sdpi-item label="Force Play">
-        <sdpi-checkbox setting="forcePlay" label="Play now (keeps the rest of the queue)"></sdpi-checkbox>
+    <sdpi-item label="When pressed">
+        <sdpi-select setting="queueMode" default="end">
+            <option value="end">Add to the end of the queue</option>
+            <option value="replace">Play now (replace the queue)</option>
+            <option value="next">Play next (keep the queue)</option>
+        </sdpi-select>
     </sdpi-item>
     <sdpi-item label="Show Now-playing Artwork">
         <sdpi-checkbox setting="showArtwork" label="Show Now-playing Artwork"></sdpi-checkbox>

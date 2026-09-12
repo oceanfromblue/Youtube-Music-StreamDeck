@@ -88,7 +88,7 @@ Add a YouTube Music playlist to the queue.
 | Argument | Description |
 |---|---|
 | `Playlist Id` | The ID of the playlist. If the shared link is `https://music.youtube.com/playlist?list=abcde`, `Playlist Id` is `abcde`. |
-| `Force Play` | Insert the playlist right after the current song and play it now. The rest of the queue is kept. |
+| `When pressed` | What the key does with the queue — see [When pressed](#when-pressed). |
 | `Shuffle` | Shuffle the playlist before adding to the queue. |
 
 ### Add Track to Queue
@@ -97,7 +97,16 @@ Add a YouTube Music track to the queue.
 | Argument | Description |
 |---|---|
 | `videoId` | The ID of the video. If the music link is `https://music.youtube.com/watch?v=abcde&...`, `videoId` is `abcde`.|
-| `forcePlay` | Insert the track right after the current song and play it now. The rest of the queue is kept. |
+| `When pressed` | What the key does with the queue — see [When pressed](#when-pressed). |
+
+#### When pressed
+Both queue actions share this setting, which decides what happens to the queue you already have.
+
+| Option | Behaviour |
+|---|---|
+| `Add to the end of the queue` (default) | Appends to the queue and leaves playback alone. Starts playing only when nothing is playing. |
+| `Play now (replace the queue)` | Clears the queue first, then plays the selected track / playlist from scratch. |
+| `Play next (keep the queue)` | Inserts right after the current song and plays it immediately. The rest of the queue is kept. |
 
 ### Artwork
 Displays the album art of the currently playing song. It can optionally overlay the

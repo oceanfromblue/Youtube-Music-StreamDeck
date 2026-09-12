@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Previous: double triangle knocked out of a disc (nudged so it looks centred) -->
+  <mask id="glyph">
+    <rect width="256" height="256" fill="#fff"/>
+    <g fill="#000" stroke="#000" stroke-width="10" stroke-linejoin="round" transform="translate(256,0) scale(-1,1)">
+      <path d="M86 88 L132 128 L86 168 Z"/>
+      <path d="M140 88 L186 128 L140 168 Z"/>
+    </g>
+  </mask>
+  <circle cx="128" cy="128" r="120" fill="#fff" mask="url(#glyph)"/>
+</svg>

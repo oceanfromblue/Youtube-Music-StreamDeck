@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Add Playlist to Queue: track list with a plus -->
+  <mask id="cut">
+    <rect width="256" height="256" fill="#fff"/>
+    <circle cx="208" cy="194" r="62" fill="#000"/>
+  </mask>
+  <g mask="url(#cut)" fill="none" stroke="#fff" stroke-width="26" stroke-linecap="round">
+    <path d="M21 40 H213"/>
+    <path d="M21 110 H213"/>
+    <path d="M21 180 H213"/>
+  </g>
+  <path d="M208 158 v72 M172 194 h72" fill="none" stroke="#fff" stroke-width="26" stroke-linecap="round"/>
+</svg>

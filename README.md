@@ -10,7 +10,16 @@ This streamdeck plugin allows you to control YouTube Music with [pear-desktop](h
 [![Watchers](https://img.shields.io/github/watchers/tuat-yate/ytm-desktop-controller)](https://github.com/tuat-yate/ytm-desktop-controller/watchers)
 
 ## Setup
-1. Install [pear-desktop](https://github.com/pear-devs/pear-desktop)  
+
+> [!IMPORTANT]
+> This plugin requires **pear-desktop v3.11.0 or later** (verified with v3.12.0), with its **API Server** plugin
+> enabled and set to **no authorization**. Nothing works without it — the keys show a red **Setup** warning while the
+> API cannot be reached.
+>
+> On older builds the keys still work, but Like / Dislike cannot show whether the current song is rated: the
+> `/like-state` endpoint was added in v3.11.0.
+
+1. Install [pear-desktop](https://github.com/pear-devs/pear-desktop) (v3.11.0 or later)  
     Please refer [pear-desktop installation guide](https://github.com/pear-devs/pear-desktop?tab=readme-ov-file#download).
 2. Set API Plugin on pear-desktop  
     Please click `Plugins -> API Server [beta]`, then, set `Plugins -> API Server [beta] -> Authorization strategy -> No authorization`.  
@@ -79,7 +88,7 @@ Add a YouTube Music playlist to the queue.
 | Argument | Description |
 |---|---|
 | `Playlist Id` | The ID of the playlist. If the shared link is `https://music.youtube.com/playlist?list=abcde`, `Playlist Id` is `abcde`. |
-| `Force Play` | Skip the current queue and play. |
+| `Force Play` | Insert the playlist right after the current song and play it now. The rest of the queue is kept. |
 | `Shuffle` | Shuffle the playlist before adding to the queue. |
 
 ### Add Track to Queue
@@ -88,7 +97,7 @@ Add a YouTube Music track to the queue.
 | Argument | Description |
 |---|---|
 | `videoId` | The ID of the video. If the music link is `https://music.youtube.com/watch?v=abcde&...`, `videoId` is `abcde`.|
-| `forcePlay` | Skip the current queue and play. |
+| `forcePlay` | Insert the track right after the current song and play it now. The rest of the queue is kept. |
 
 ### Artwork
 Displays the album art of the currently playing song. It can optionally overlay the
@@ -120,10 +129,17 @@ Skip to the next track. Can also display the now-playing artwork — see [Base A
 Skip to the previous track. Can also display the now-playing artwork — see [Base Arguments](#base-arguments).
 
 ### Like
-Like the currently playing song. 
+Like the currently playing song.
+
+The key turns pink while the currently playing song is liked, and goes back to the normal look when the like is removed
+or the track changes. The state is polled once a second from pear-desktop, so it also follows likes you make in the app
+itself. (Needs pear-desktop v3.11.0 or later — on older builds the key just keeps its normal look.)
+
+If **Show Artwork** is enabled the artwork covers the key, so turn it off to see the colour.
 
 ### Dislike
-Dislike the currently playing song. 
+Dislike the currently playing song. The key turns blue while the currently playing song is disliked — same behaviour as
+[Like](#like). 
 
 ---
 
@@ -137,3 +153,17 @@ This project is developed by an individual. While I strive to ensure stability, 
 * **Contributions:** Pull Requests are highly welcome! If you find a bug or want to improve the code, please feel free to contribute.
 * **Donations:** If you find this plugin useful and would like to support its development, please consider buying me a coffee.  
 [![Buy Me a Coffee](https://img.shields.io/badge/-buy_me_a%C2%A0coffee-gray?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/yate)
+
+
+### Icons
+All key images are generated from the SVG sources in `tools/icons/` (a white glyph on a transparent 256x256 canvas):
+
+```
+npm run icons              # regenerate every image
+npm run icons -- like next # only these sources
+```
+
+`<action>.svg` writes `imgs/actions/<action>/{icon,icon@2x,key,key@2x}.png`, and `logo.svg` writes the plugin's
+`category-icon` / `marketplace` images. `like` and `dislike` additionally get `key-active[@2x].png` — the glyph on a
+full-bleed pink / blue instead of the circle — for use as a second, "on" state. Colours and sizes live at the top of
+`tools/gen-icons.mjs`.

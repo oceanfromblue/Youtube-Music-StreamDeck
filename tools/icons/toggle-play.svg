@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Toggle Play: play triangle + pause bar knocked out of a disc -->
+  <mask id="glyph">
+    <rect width="256" height="256" fill="#fff"/>
+    <path d="M79 84 L139 128 L79 172 Z" fill="#000" stroke="#000" stroke-width="10" stroke-linejoin="round"/>
+    <rect x="153" y="84" width="24" height="88" rx="10" fill="#000"/>
+  </mask>
+  <circle cx="128" cy="128" r="120" fill="#fff" mask="url(#glyph)"/>
+</svg>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Set Volume: speaker with sound waves -->
+  <path d="M30 104 h34 L118 62 a10 10 0 0 1 16 8 v116 a10 10 0 0 1-16 8 L64 152 H30 a10 10 0 0 1-10-10 v-28 a10 10 0 0 1 10-10 Z" fill="#fff"/>
+  <g fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round">
+    <path d="M164 101 A36 36 0 0 1 164 155"/>
+    <path d="M182 82 A62 62 0 0 1 182 174"/>
+    <path d="M199 63 A88 88 0 0 1 199 193"/>
+  </g>
+</svg>

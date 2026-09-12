@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Plugin mark: beamed eighth notes -->
+  <g fill="#fff">
+    <path d="M92 62 L214 34 v34 L92 96 Z"/>
+    <rect x="92" y="62" width="20" height="128" rx="6"/>
+    <rect x="194" y="34" width="20" height="128" rx="6"/>
+    <ellipse cx="72" cy="190" rx="34" ry="27" transform="rotate(-16 72 190)"/>
+    <ellipse cx="174" cy="162" rx="34" ry="27" transform="rotate(-16 174 162)"/>
+  </g>
+</svg>

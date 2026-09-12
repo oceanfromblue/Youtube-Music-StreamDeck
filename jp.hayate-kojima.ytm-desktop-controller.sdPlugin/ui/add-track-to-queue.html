@@ -13,7 +13,7 @@
         <sdpi-textfield setting="videoId" placeholder="Enter Video ID" required></sdpi-textfield>
     </sdpi-item>
     <sdpi-item label="Force Play">
-        <sdpi-checkbox setting="forcePlay" label="Skip queue & play immediately"></sdpi-checkbox>
+        <sdpi-checkbox setting="forcePlay" label="Play now (keeps the rest of the queue)"></sdpi-checkbox>
     </sdpi-item>
     <sdpi-item label="Show Now-playing Artwork">
         <sdpi-checkbox setting="showArtwork" label="Show Now-playing Artwork"></sdpi-checkbox>
@@ -52,5 +52,6 @@
             init();
         })();
     </script>
+    <script src="setup-link.js"></script>
 </body>
 </html>

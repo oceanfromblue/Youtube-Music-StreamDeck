@@ -1,4 +1,4 @@
-import { action, KeyDownEvent } from "@elgato/streamdeck";
+import { action, KeyDownEvent, streamDeck } from "@elgato/streamdeck";
 import { BaseAction, BaseSettings } from "./base-action";
 
 type VolumeSettings = BaseSettings & {
@@ -14,7 +14,7 @@ export class SetVolumeAction extends BaseAction<VolumeSettings> {
 			// PIからは文字列で来ることがあるため数値化する
 			let volume = Number(ev.payload.settings.volume);
 			if (!Number.isFinite(volume)) {
-				console.warn("[SetVolumeAction] Volume is not configured.");
+				streamDeck.logger.warn("Volume is not configured.");
 				return;
 			}
 
@@ -24,7 +24,7 @@ export class SetVolumeAction extends BaseAction<VolumeSettings> {
 
 			await this.post(port, "/volume", { volume });
 		} catch (error) {
-			console.error("[SetVolumeAction] Error:", error);
+			streamDeck.logger.error("POST /volume failed", error);
 		}
 	}
 }

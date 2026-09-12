@@ -1,6 +1,7 @@
 {
     "scripts": {
         "build": "rollup -c",
+        "icons": "node tools/gen-icons.mjs",
         "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart jp.hayate-kojima.ytm-desktop-controller\""
     },
     "type": "module",
@@ -12,12 +13,15 @@
         "@rollup/plugin-typescript": "^12.1.0",
         "@tsconfig/node20": "^20.1.2",
         "@types/node": "~20.15.0",
+        "@types/ws": "^8.18.1",
         "rollup": "^4.57.0",
+        "sharp": "^0.35.4",
         "tslib": "^2.6.2",
         "typescript": "^5.2.2"
     },
     "dependencies": {
         "@elgato/streamdeck": "^2.0.0",
+        "ws": "^8.21.3",
         "youtube-music-ts-api": "^1.8.4"
     }
 }

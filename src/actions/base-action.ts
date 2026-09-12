@@ -1,4 +1,5 @@
-import { DidReceiveGlobalSettingsEvent, DidReceiveSettingsEvent, SingletonAction, streamDeck, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
+import { DidReceiveGlobalSettingsEvent, DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, streamDeck, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
+import { getPlayerFeed, PlayerFeed, SongInfo } from "../player-feed";
 
 export type BaseSettings = {
 	port: string; // Kept for individual overrides, but global is preferred.
@@ -22,6 +23,11 @@ type RenderState<T extends BaseSettings> = {
 	fetching: boolean;
 	lastDataAt: number;
 
+	feed?: PlayerFeed;          // 再生状態の受信口(WebSocket)
+	feedPort?: string;          // 受信口に使っているポート
+	polling: boolean;           // onPoll 実行中か
+	lastPollAt: number;
+
 	trackKey?: string;          // 曲の同一性判定キー(videoId 等)
 	imageDataUri?: string;      // キャッシュ済みカバー画像(data URI)
 	imageDims?: { w: number; h: number };
@@ -37,6 +43,9 @@ type RenderState<T extends BaseSettings> = {
 
 	lastImageSent?: string;     // 同一画像の再送を避けるため
 	showingBlank: boolean;      // 直近で setImage(undefined) 済みか
+
+	offlineSince?: number;      // API に届かなくなった時刻(猶予を見てから警告する)
+	showingWarning: boolean;    // 警告画像を出しているか
 };
 
 // 描画パラメータ
@@ -59,6 +68,19 @@ const TEXT_COLOR = "#ffffff";
 const PROGRESS_HEIGHT = 6;               // バーの高さ(px)
 const PROGRESS_FILL = "#1ed760";         // 経過部分(緑系)
 const PROGRESS_TRACK = "rgba(255,255,255,0.25)"; // 未経過部分(トラック)
+
+// API に届かない時の警告表示。セットアップ(API Server の有効化)に気付いてもらうため、
+// 設定画面を開かない人にも見えるキー上に出す。一時的な切断で点滅しないよう猶予を置く。
+const OFFLINE_GRACE_MS = 5000;
+const WARNING_IMAGE = `data:image/svg+xml;base64,${Buffer.from(
+	`<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_SIZE}" height="${CANVAS_SIZE}" viewBox="0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}">`
+		+ `<rect width="${CANVAS_SIZE}" height="${CANVAS_SIZE}" fill="#B03A3A"/>`
+		+ `<path d="M72 24 L120 100 H24 Z" fill="none" stroke="#ffffff" stroke-width="10" stroke-linejoin="round"/>`
+		+ `<rect x="67" y="50" width="10" height="26" rx="5" fill="#ffffff"/>`
+		+ `<circle cx="72" cy="88" r="6" fill="#ffffff"/>`
+		+ `<text x="72" y="132" text-anchor="middle" font-family="${FONT_FAMILY}" font-size="24" font-weight="${FONT_WEIGHT}" fill="#ffffff">Setup</text>`
+		+ `</svg>`,
+).toString("base64")}`;
 
 export abstract class BaseAction<T extends BaseSettings> extends SingletonAction<T> {
 
@@ -83,6 +105,17 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 		}
 	}
 
+	// アートワーク表示に関係なく1秒ごとのポーリングを続けるか。
+	// 再生中の曲の状態(いいね等)をキーに反映するアクションが true にする。
+	protected get needsPolling(): boolean {
+		return false;
+	}
+
+	// ポーリングのたびに呼ばれるフック(既定では何もしない)。
+	protected async onPoll(ev: WillAppearEvent<T>, port: string): Promise<void> {
+		// サブクラス用。
+	}
+
     protected getPort(settings: T): string {
         return this.globalSettings.port || settings.port || "26538";
     }
@@ -97,11 +130,11 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
         options: RequestInit = {}
     ): Promise<Response> {
         const url = `${this.getBaseUrl(port)}${endpoint}`;
+        const method = options.method ?? "GET";
         const defaultHeaders: Record<string, string> = {
             "Content-Type": "application/json"
         };
 
-        // options.headers の処理を修正
         const headers = { ...defaultHeaders };
         if (options.headers) {
              Object.assign(headers, options.headers);
@@ -114,33 +147,30 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
             });
 
             if (!response.ok) {
-                console.warn(`[${this.constructor.name}] Request to ${endpoint} failed: ${response.status} ${response.statusText}`);
+                streamDeck.logger.warn(`${method} ${endpoint} failed: ${response.status} ${response.statusText}`);
             }
             return response;
         } catch (error) {
-            console.error(`[${this.constructor.name}] Request error (${endpoint}):`, error);
+            // アプリ未起動なら繋がらないのが普通なので、通信エラー自体は debug 止まりにする
+            // (HTTP として応答がある失敗は上の warn で残る)。
+            streamDeck.logger.debug(`${method} ${endpoint} error`, error);
             throw error;
         }
     }
 
     protected async get(port: string, endpoint: string): Promise<any> {
         const response = await this.request(port, endpoint, { method: "GET" });
-        if (response.ok) {
-            return response.json();
+        if (!response.ok) {
+            return null;
         }
-        return null;
+        // 再生中の曲が無いときの /song は 204(本文なし)。json() はそのまま呼ぶと落ちる。
+        const text = await response.text();
+        return text ? JSON.parse(text) : null;
     }
 
     protected async post(port: string, endpoint: string, body?: any): Promise<Response> {
         return this.request(port, endpoint, {
             method: "POST",
-            body: body ? JSON.stringify(body) : undefined
-        });
-    }
-
-    protected async patch(port: string, endpoint: string, body?: any): Promise<Response> {
-        return this.request(port, endpoint, {
-            method: "PATCH",
             body: body ? JSON.stringify(body) : undefined
         });
     }
@@ -151,6 +181,16 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
             body: body ? JSON.stringify(body) : undefined
         });
     }
+
+	// キー押下で API を1回叩くだけのアクション向け。失敗してもキー側で出来ることは
+	// ないので、ログに残して握り潰す。
+	protected async send(ev: KeyDownEvent<T>, endpoint: string, body?: any): Promise<void> {
+		try {
+			await this.post(this.getPort(ev.payload.settings), endpoint, body);
+		} catch (error) {
+			streamDeck.logger.error(`POST ${endpoint} failed`, error);
+		}
+	}
 
 	// JPEG/PNG のヘッダから画像サイズを読む(画素はデコードしない)。読めなければ null。
 	private getImageSize(buf: Buffer, mime: string): { w: number; h: number } | null {
@@ -205,10 +245,10 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 			.trim();
 	}
 
-	// 1秒に一度 /song を取得し、曲が変わった時だけカバー画像を取り直す。
-	private async refreshData(st: RenderState<T>, settings: T): Promise<void> {
-		const port = this.getPort(settings);
-		const songInfo = await this.get(port, "/song");
+	// 再生中の曲を取り込み、曲が変わった時だけカバー画像を取り直す。
+	// 曲情報は WebSocket から受け取り、繋がっていない時だけ /song を叩く。
+	private async refreshData(st: RenderState<T>, settings: T, feed: PlayerFeed): Promise<void> {
+		const songInfo: SongInfo | null = feed.live ? feed.current() : await this.get(this.getPort(settings), "/song");
 
 		// 再生していない / 画像なし は空表示扱い
 		if (!songInfo || songInfo.isPaused || !songInfo.imageSrc) {
@@ -317,6 +357,49 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 		return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 	}
 
+	// 設定中のポートに対応する受信口を確保する(ポートが変わったら張り替える)。
+	private attachFeed(st: RenderState<T>, settings: T): PlayerFeed {
+		const port = this.getPort(settings);
+		if (st.feedPort !== port) {
+			st.feed?.release();
+			st.feed = getPlayerFeed(port);
+			st.feed.acquire();
+			st.feedPort = port;
+		}
+		return st.feed!;
+	}
+
+	/**
+	 * API に届いていなければキーへ警告画像を出す。警告中は true を返し、呼び出し側は
+	 * 以降の処理(ポーリングや描画)を飛ばす。復帰したら画像を戻して通常描画に任せる。
+	 */
+	private applyOfflineWarning(ev: WillAppearEvent<T>, st: RenderState<T>, feed: PlayerFeed, now: number): boolean {
+		if (!feed.online) {
+			st.offlineSince ??= now;
+			if (now - st.offlineSince < OFFLINE_GRACE_MS) {
+				return false;
+			}
+			if (!st.showingWarning) {
+				ev.action.setImage(WARNING_IMAGE);
+				st.showingWarning = true;
+				st.showingBlank = false;
+				st.lastImageSent = undefined;
+			}
+			return true;
+		}
+
+		st.offlineSince = undefined;
+		if (st.showingWarning) {
+			st.showingWarning = false;
+			// 一旦クリアしておけば、アートワーク表示ならこの後の描画が、
+			// 非表示ならステート画像がそのまま出る。
+			ev.action.setImage(undefined);
+			st.showingBlank = true;
+			st.lastImageSent = undefined;
+		}
+		return false;
+	}
+
 	// スクロール要否に合わせてループ間隔を切り替える(必要な時だけ高頻度描画)。
 	private applyLoopRate(ev: WillAppearEvent<T>, st: RenderState<T>): void {
 		const desired = st.needsScroll && !st.isPaused ? RENDER_INTERVAL_MS : DATA_INTERVAL_MS;
@@ -339,8 +422,30 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 			return;
 		}
 		const settings = st.settings;
+		const feed = this.attachFeed(st, settings);
+		const now = Date.now();
 
-		// アートワーク非表示: 一度だけ画像をクリアして終了
+		// API に届かない状態が続いたらキーに警告を出す(アートワーク表示の有無に関わらず)。
+		// 何をしても無反応になるため、セットアップ漏れやアプリ未起動に気付けるようにする。
+		if (this.applyOfflineWarning(ev, st, feed, now)) {
+			return;
+		}
+
+		// WebSocket にイベントが無いもの(いいね状態など)は1秒ごとに取りに行く。
+		// アートワーク非表示でもキーの状態は更新し続ける。
+		if (this.needsPolling && !st.polling && now - st.lastPollAt >= DATA_INTERVAL_MS) {
+			st.lastPollAt = now;
+			st.polling = true;
+			try {
+				await this.onPoll(ev, this.getPort(settings));
+			} catch (error) {
+				streamDeck.logger.debug("Failed to poll player state", error);
+			} finally {
+				st.polling = false;
+			}
+		}
+
+		// アートワーク非表示: 一度だけ画像をクリアして終了(以降はステート画像が見える)
 		if (!settings.showArtwork) {
 			if (!st.showingBlank) {
 				ev.action.setImage(undefined);
@@ -350,15 +455,15 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 			return;
 		}
 
-		// データ取得は1秒間隔にスロットリング(描画は高頻度でも /song は叩きすぎない)
-		const now = Date.now();
-		if (!st.fetching && now - st.lastDataAt >= DATA_INTERVAL_MS) {
+		// 曲情報の更新。WebSocket が繋がっていれば毎tick(通信なし)で反映し、
+		// 繋がっていない間だけ1秒間隔で /song にフォールバックする。
+		if (!st.fetching && (feed.live || now - st.lastDataAt >= DATA_INTERVAL_MS)) {
 			st.lastDataAt = now;
 			st.fetching = true;
 			try {
-				await this.refreshData(st, settings);
+				await this.refreshData(st, settings, feed);
 			} catch (error) {
-				console.error("Error fetching song data:", error);
+				streamDeck.logger.debug("Failed to refresh song data", error);
 			} finally {
 				st.fetching = false;
 			}
@@ -390,7 +495,7 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 			ev.action.setImage(image);
 			st.lastImageSent = image;
 		} catch (error) {
-			console.error("Error rendering image:", error);
+			streamDeck.logger.error("Failed to render key image", error);
 		}
 	}
 
@@ -408,8 +513,12 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 			duration: 0,
 			elapsed: 0,
 			showingBlank: false,
+			polling: false,
+			lastPollAt: 0,
+			showingWarning: false,
 		};
 		this.states.set(ev.action.id, st);
+		this.attachFeed(st, st.settings);
 		this.startLoop(ev, st, DATA_INTERVAL_MS);
 	}
 
@@ -420,6 +529,7 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 		if (st?.loop) {
 			clearInterval(st.loop);
 		}
+		st?.feed?.release();
 		this.states.delete(ev.action.id);
 	}
 

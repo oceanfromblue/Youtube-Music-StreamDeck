@@ -1,6 +1,6 @@
 {
 	"Name": "ytm-desktop controller",
-	"Version": "0.2.0.0",
+	"Version": "0.3.0.0",
 	"Author": "Hayate Kojima",
 	"Actions": [
 		{
@@ -44,9 +44,14 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"DisableAutomaticStates": true,
 			"States": [
 				{
 					"Image": "imgs/actions/like/key",
+					"TitleAlignment": "middle"
+				},
+				{
+					"Image": "imgs/actions/like/key-active",
 					"TitleAlignment": "middle"
 				}
 			]
@@ -60,9 +65,14 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"DisableAutomaticStates": true,
 			"States": [
 				{
 					"Image": "imgs/actions/dislike/key",
+					"TitleAlignment": "middle"
+				},
+				{
+					"Image": "imgs/actions/dislike/key-active",
 					"TitleAlignment": "middle"
 				}
 			]
@@ -200,8 +210,7 @@
 		}
 	],
 	"Nodejs": {
-		"Version": "20",
-		"Debug": "enabled"
+		"Version": "20"
 	},
 	"UUID": "jp.hayate-kojima.ytm-desktop-controller"
 }

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Go Back: counter-clockwise circular arrow -->
+  <g transform="translate(256,0) scale(-1,1)">
+    <path d="M168 70.7 A80 80 0 1 1 88 70.7" fill="none" stroke="#fff" stroke-width="30"/>
+    <path d="M119 51 L99 101 L66 46 Z" fill="#fff" stroke="#fff" stroke-width="8" stroke-linejoin="round"/>
+  </g>
+</svg>

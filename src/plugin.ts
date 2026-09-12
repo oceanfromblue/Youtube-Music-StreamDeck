@@ -8,8 +8,10 @@ import { ArtworkAction } from "./actions/artwork";
 import { GoForwardAction, GoBackAction } from "./actions/go-forward-back";
 import { SetVolumeAction } from "./actions/volume";
 
-// We can enable "trace" logging so that all messages between the Stream Deck, and the plugin are recorded. When storing sensitive information
-streamDeck.logger.setLevel("trace");
+// "trace" は Stream Deck とのやり取りを全て記録する。アートワーク表示中は毎フレームの
+// setImage(キー画像の data URI)まで残るためログが数分で数十MBに膨らむので、既定は "info"。
+// プロトコルを追いたいときだけ一時的に "trace" に戻す。
+streamDeck.logger.setLevel("info");
 
 // Register the increment action.
 streamDeck.actions.registerAction(new AddTrackToQueueAction());

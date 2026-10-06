@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <title>Dial Settings</title>
+    <meta charset="utf-8" />
+    <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+</head>
+<body>
+    <sdpi-item label="Port">
+        <sdpi-textfield setting="port" global placeholder="26538" pattern="\d*"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Step per click">
+        <sdpi-textfield setting="step" placeholder="5" pattern="\d*"></sdpi-textfield>
+    </sdpi-item>
+    <div style="margin: 0 8px 6px 104px; color: #9a9a9a; font-family: 'Segoe UI', Arial, sans-serif; font-size: 8pt;">Volume Dial: % per click. Seek Dial: seconds per click.</div>
+    <script src="setup-link.js"></script>
+</body>
+</html>

@@ -1,16 +1,30 @@
-import { DidReceiveGlobalSettingsEvent, DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, streamDeck, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
+import { DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, streamDeck, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
+import { DEFAULT_PORT, globalSettings } from "../global-settings";
 import { getPlayerFeed, PlayerFeed, SongInfo } from "../player-feed";
+import { YtmAuth } from "../ytm-client";
+
+export type TextPosition = "top" | "middle" | "bottom";
 
 export type BaseSettings = {
 	port: string; // Kept for individual overrides, but global is preferred.
     showArtwork: boolean;
     showText?: boolean;       // アートワーク上にテキストを重ねるか
-    textTemplate?: string;    // {title} {artist} {album} を含むテンプレート
+    textTemplate?: string;    // {title} {artist} {album} {elapsed} {duration} {remaining} を含むテンプレート
     showProgress?: boolean;   // 下部に再生進捗バーを表示するか
+    textFont?: string;        // FONT_PRESETS のキー、または "custom"
+    textFontCustom?: string;  // textFont が "custom" の時のフォント名
+    textSize?: number | string;
+    textColor?: string;       // #rrggbb
+    textWeight?: "bold" | "normal";
+    textPosition?: TextPosition;
+    textBackground?: boolean; // 文字の後ろを暗く(明るい文字色なら)/明るく(暗い文字色なら)するか。既定 true
 };
 
-export type GlobalSettings = {
-    port?: string;
+// キー画像を差し替えられるもの(KeyAction / DialAction の共通部分)。
+type ImageTarget = {
+	readonly id: string;
+	setImage(image?: string): Promise<void>;
+	isKey(): boolean;
 };
 
 // ボタン(コンテキスト)ごとに保持する描画状態。
@@ -46,11 +60,15 @@ type RenderState<T extends BaseSettings> = {
 
 	offlineSince?: number;      // API に届かなくなった時刻(猶予を見てから警告する)
 	showingWarning: boolean;    // 警告画像を出しているか
+
+	flashUntil?: number;        // 一時メッセージ(flash)を出している間は描画を止める
+	sentState?: number;         // 直近で setState したステート
+	idleImage?: string;         // アートワークを出していない時の画像(undefined ならステート画像)
+	idleSent?: string;          // 直近で出した idleImage
 };
 
 // 描画パラメータ
 const CANVAS_SIZE = 144;
-const FONT_SIZE = 24;
 const PAD_X = 8;
 const SCROLL_GAP = 40;        // ループ時の文字列同士の間隔
 const SCROLL_STEP = 1.4;      // 1フレームあたりの移動量(px)。小さいほどゆっくり(現在 約28px/秒)
@@ -59,15 +77,46 @@ const RENDER_INTERVAL_MS = 50; // 描画間隔(ms)。小さいほど滑らか(=�
 const AVAIL_WIDTH = CANVAS_SIZE - PAD_X * 2;
 const DEFAULT_TEMPLATE = "{title} - {artist}";
 
-// テキストの見た目(自前SVG描画なので自由に調整可能)
+// テキストの見た目(自前SVG描画なので自由に調整可能)。設定が無ければこの値を使う。
 const FONT_FAMILY = "'Helvetica Neue', 'Segoe UI', Arial, sans-serif";
 const FONT_WEIGHT = 700;
+const DEFAULT_FONT_SIZE = 24;
+const MIN_FONT_SIZE = 8;
+const MAX_FONT_SIZE = 60;
 const TEXT_COLOR = "#ffffff";
+
+// Text Font で選べるフォント。キー画像は Stream Deck 側で描画されるため、PC に入っている
+// フォントしか使えない。Windows / macOS のどちらかに無い場合に備えて代替を並べておく。
+const FONT_PRESETS: Record<string, string> = {
+	default: FONT_FAMILY,
+	arial: "Arial, sans-serif",
+	helvetica: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+	segoe: "'Segoe UI', Arial, sans-serif",
+	verdana: "Verdana, sans-serif",
+	tahoma: "Tahoma, sans-serif",
+	trebuchet: "'Trebuchet MS', sans-serif",
+	georgia: "Georgia, serif",
+	times: "'Times New Roman', Times, serif",
+	courier: "'Courier New', Courier, monospace",
+	impact: "Impact, sans-serif",
+	comic: "'Comic Sans MS', sans-serif",
+	malgun: "'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif",
+	"apple-sd": "'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
+	nanum: "NanumGothic, 'Nanum Gothic', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif",
+	"noto-kr": "'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif",
+	meiryo: "Meiryo, 'Hiragino Sans', sans-serif",
+	"yu-gothic": "'Yu Gothic', YuGothic, 'Hiragino Sans', sans-serif",
+	hiragino: "'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif",
+};
 
 // 進捗バー
 const PROGRESS_HEIGHT = 6;               // バーの高さ(px)
 const PROGRESS_FILL = "#1ed760";         // 経過部分(緑系)
 const PROGRESS_TRACK = "rgba(255,255,255,0.25)"; // 未経過部分(トラック)
+
+// キー押下の結果をキー上に一瞬出すメッセージ(flash)
+const FLASH_MS = 1500;
+const FLASH_BG = "#262626";
 
 // API に届かない時の警告表示。セットアップ(API Server の有効化)に気付いてもらうため、
 // 設定画面を開かない人にも見えるキー上に出す。一時的な切断で点滅しないよう猶予を置く。
@@ -82,19 +131,81 @@ const WARNING_IMAGE = `data:image/svg+xml;base64,${Buffer.from(
 		+ `</svg>`,
 ).toString("base64")}`;
 
+// テキスト描画に使う値(設定を検証・既定値で埋めたもの)
+type TextStyle = {
+	family: string;
+	size: number;
+	weight: number;
+	color: string;
+	position: TextPosition;
+	background: boolean;
+	dark: boolean; // 文字色が暗い(影・背景を白系にする)
+};
+
+function escapeXml(s: string): string {
+	return s
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&apos;");
+}
+
+// 半角/全角をざっくり重み付けして文字列の表示幅を概算する。
+// Node 実行のため canvas measureText が使えず、スクロール要否とループ幅の
+// 判定にはこの概算で十分。
+function measureText(text: string, fontSize: number, narrowRatio = 0.55): number {
+	let w = 0;
+	for (const ch of text) {
+		const wide = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦　-〿぀-ヿ㐀-䶿一-鿿]/.test(ch);
+		w += wide ? fontSize : fontSize * narrowRatio;
+	}
+	return w;
+}
+
+// 秒を m:ss(1時間以上なら h:mm:ss)にする
+function formatTime(totalSeconds: number): string {
+	const s = Math.max(0, Math.floor(totalSeconds));
+	const h = Math.floor(s / 3600);
+	const m = Math.floor((s % 3600) / 60);
+	const sec = String(s % 60).padStart(2, "0");
+	return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+function resolveTextStyle(settings: BaseSettings): TextStyle {
+	let family = FONT_PRESETS[settings.textFont ?? "default"] ?? FONT_FAMILY;
+	const custom = settings.textFontCustom?.trim();
+	if (settings.textFont === "custom" && custom) {
+		// 1つだけ書かれたら引用符で囲み、見つからない時のために既定フォントへ落とす
+		family = custom.includes(",") ? custom : `'${custom.replace(/'/g, "")}', ${FONT_FAMILY}`;
+	}
+
+	const sizeValue = Number(settings.textSize);
+	const size = Number.isFinite(sizeValue) && sizeValue > 0
+		? Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(sizeValue)))
+		: DEFAULT_FONT_SIZE;
+
+	const color = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(settings.textColor ?? "") ? settings.textColor! : TEXT_COLOR;
+	const hex = color.length === 4 ? color.replace(/^#(.)(.)(.)$/, "#$1$1$2$2$3$3") : color;
+	const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+	const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+	const position = settings.textPosition === "top" || settings.textPosition === "middle" ? settings.textPosition : "bottom";
+
+	return {
+		family,
+		size,
+		weight: settings.textWeight === "normal" ? 400 : FONT_WEIGHT,
+		color,
+		position,
+		background: settings.textBackground !== false,
+		dark: luminance < 0.45,
+	};
+}
+
 export abstract class BaseAction<T extends BaseSettings> extends SingletonAction<T> {
 
 	private states = new Map<string, RenderState<T>>();
-	private globalSettings: GlobalSettings = {};
-
-	constructor() {
-		super();
-		streamDeck.settings.getGlobalSettings<GlobalSettings>().then(settings => this.globalSettings = settings || {});
-	}
-
-	onDidReceiveGlobalSettings(ev: DidReceiveGlobalSettingsEvent<GlobalSettings>): void {
-		this.globalSettings = ev.settings;
-	}
 
 	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<T>): void {
 		const st = this.states.get(ev.action.id);
@@ -102,6 +213,8 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 			st.settings = ev.payload.settings;
 			st.lastDataAt = 0;       // 次tickで即再評価(テンプレート変更などを反映)
 			st.lastImageSent = undefined;
+			st.text = "";            // 文字の見た目が変わったら測り直す
+			st.scrollOffset = 0;
 		}
 	}
 
@@ -111,13 +224,20 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 		return false;
 	}
 
-	// ポーリングのたびに呼ばれるフック(既定では何もしない)。
-	protected async onPoll(ev: WillAppearEvent<T>, port: string): Promise<void> {
+	// ポーリングのたびに呼ばれるフック(既定では何もしない)。ev は表示時のものなので、
+	// 設定は ev.payload ではなく settings(最新)を使うこと。
+	protected async onPoll(ev: WillAppearEvent<T>, port: string, feed: PlayerFeed, settings: T): Promise<void> {
 		// サブクラス用。
 	}
 
     protected getPort(settings: T): string {
-        return this.globalSettings.port || settings.port || "26538";
+        return globalSettings().port || settings.port || DEFAULT_PORT;
+    }
+
+    // Add to Playlist などで使う YouTube Music の Cookie(全体設定)。
+    protected getYtmAuth(): YtmAuth | undefined {
+        const g = globalSettings();
+        return g.ytmCookie ? { cookie: g.ytmCookie, authUser: g.ytmAuthUser, brandId: g.ytmBrandId } : undefined;
     }
 
     protected getBaseUrl(port: string): string {
@@ -175,6 +295,13 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
         });
     }
 
+    protected async patch(port: string, endpoint: string, body?: any): Promise<Response> {
+        return this.request(port, endpoint, {
+            method: "PATCH",
+            body: body ? JSON.stringify(body) : undefined
+        });
+    }
+
     protected async delete(port: string, endpoint: string, body?: any): Promise<Response> {
         return this.request(port, endpoint, {
             method: "DELETE",
@@ -190,6 +317,116 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 		} catch (error) {
 			streamDeck.logger.error(`POST ${endpoint} failed`, error);
 		}
+	}
+
+	// 再生中の曲。WebSocket が生きていればその値、駄目なら /song を読む。
+	protected async currentSong(settings: T): Promise<SongInfo | null> {
+		const port = this.getPort(settings);
+		const feed = getPlayerFeed(port);
+		if (feed.live) {
+			return feed.current();
+		}
+		try {
+			return await this.get(port, "/song");
+		} catch {
+			return null;
+		}
+	}
+
+	// 現在の音量。WebSocket で受け取った値があればそれ、無ければ GET /volume。
+	protected async currentVolume(settings: T): Promise<number | undefined> {
+		const feed = this.feedFor(settings);
+		if (typeof feed.volume === "number") {
+			return feed.volume;
+		}
+		try {
+			const res = await this.get(this.getPort(settings), "/volume");
+			return typeof res?.state === "number" ? res.state : undefined;
+		} catch {
+			return undefined;
+		}
+	}
+
+	// 再生状態の受信口(キーが表示されている間はプラグイン全体で共有されている)。
+	protected feedFor(settings: T): PlayerFeed {
+		return getPlayerFeed(this.getPort(settings));
+	}
+
+	/**
+	 * キーのステート画像を切り替える(前回と同じなら送らない)。
+	 * 状態(いいね・ミュート等)を表すアクションが使う。ダイアルには何もしない。
+	 */
+	protected async applyState(target: { readonly id: string; isKey(): boolean; setState?(state: number): Promise<void> }, state: number): Promise<void> {
+		const st = this.states.get(target.id);
+		if (!target.isKey() || !target.setState || st?.sentState === state) {
+			return;
+		}
+		if (st) {
+			st.sentState = state;
+		}
+		await target.setState(state);
+	}
+
+	/**
+	 * アートワークを出していない時に見せる画像を差し替える(undefined でステート画像に戻す)。
+	 * ステートが2つでは足りない表示(リピートの「1曲」など)に使う。
+	 */
+	protected setIdleImage(target: ImageTarget, image: string | undefined): void {
+		const st = this.states.get(target.id);
+		if (!st || st.idleImage === image) {
+			return;
+		}
+		st.idleImage = image;
+		// いま待機表示中ならすぐ反映する(アートワーク・メッセージ表示中は次の待機時に出る)
+		if (st.showingBlank && st.flashUntil === undefined && !st.showingWarning) {
+			this.showIdle(target, st);
+		}
+	}
+
+	/**
+	 * キー上に短いメッセージ(例: "Added")を一瞬出す。表示中はアートワーク等の描画を止め、
+	 * 時間が過ぎたら通常の表示に戻す。ms を長めにして、処理中の表示("Loading…")にも使う。
+	 */
+	protected async flash(target: ImageTarget, lines: string[], options: { ms?: number; color?: string } = {}): Promise<void> {
+		const st = this.states.get(target.id);
+		if (st) {
+			st.flashUntil = Date.now() + (options.ms ?? FLASH_MS);
+			st.lastImageSent = undefined;
+			st.showingBlank = false;
+		}
+		try {
+			await target.setImage(this.buildMessageImage(lines, options.color ?? FLASH_BG));
+		} catch (error) {
+			streamDeck.logger.debug("Failed to show a message on the key", error);
+		}
+	}
+
+	// メッセージ用の画像。行数と文字数に合わせて文字サイズを縮める。
+	private buildMessageImage(lines: string[], background: string): string {
+		const size = CANVAS_SIZE;
+		const fits = (line: string, fs: number) => measureText(line, fs) <= size - 12;
+		let fontSize = lines.filter(Boolean).length <= 1 ? 30 : lines.filter(Boolean).length === 2 ? 26 : 22;
+		while (fontSize > 16 && lines.some(line => !fits(line, fontSize))) {
+			fontSize -= 1;
+		}
+		// それでも入らない行(長いプレイリスト名など)は末尾を … で切る
+		const shown = lines.filter(Boolean).slice(0, 3).map(line => {
+			let chars = Array.from(line);
+			while (chars.length > 1 && !fits(chars.join(""), fontSize)) {
+				chars = [...chars.slice(0, -2), "…"];
+			}
+			return chars.join("");
+		});
+		const lineHeight = fontSize * 1.2;
+		const firstBaseline = size / 2 - (lineHeight * (shown.length - 1)) / 2 + fontSize * 0.35;
+		const text = shown.map((line, i) =>
+			`<text x="${size / 2}" y="${(firstBaseline + i * lineHeight).toFixed(1)}" text-anchor="middle" font-family="${FONT_FAMILY}" font-size="${fontSize}" font-weight="${FONT_WEIGHT}" fill="#ffffff">${escapeXml(line)}</text>`,
+		).join("");
+		const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`
+			+ `<rect width="${size}" height="${size}" fill="${escapeXml(background)}"/>`
+			+ text
+			+ `</svg>`;
+		return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 	}
 
 	// JPEG/PNG のヘッダから画像サイズを読む(画素はデコードしない)。読めなければ null。
@@ -214,34 +451,18 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 		return null;
 	}
 
-	// 半角/全角をざっくり重み付けして文字列の表示幅を概算する。
-	// Node 実行のため canvas measureText が使えず、スクロール要否とループ幅の
-	// 判定にはこの概算で十分。
-	private measureText(text: string, fontSize: number): number {
-		let w = 0;
-		for (const ch of text) {
-			const wide = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦　-〿぀-ヿ㐀-䶿一-鿿]/.test(ch);
-			w += wide ? fontSize : fontSize * 0.55;
-		}
-		return w;
-	}
-
-	private escapeXml(s: string): string {
-		return s
-			.replace(/&/g, "&amp;")
-			.replace(/</g, "&lt;")
-			.replace(/>/g, "&gt;")
-			.replace(/"/g, "&quot;")
-			.replace(/'/g, "&apos;");
-	}
-
 	private formatTemplate(tpl: string | undefined, song: any): string {
 		const t = tpl && tpl.trim() ? tpl : DEFAULT_TEMPLATE;
 		const artist = song.artist ?? song.author ?? "";
+		const duration = Number(song.songDuration) || 0;
+		const elapsed = Number(song.elapsedSeconds) || 0;
 		return t
 			.replace(/\{title\}/gi, song.title ?? "")
 			.replace(/\{artist\}/gi, artist)
 			.replace(/\{album\}/gi, song.album ?? "")
+			.replace(/\{elapsed\}/gi, formatTime(elapsed))
+			.replace(/\{duration\}/gi, formatTime(duration))
+			.replace(/\{remaining\}/gi, `-${formatTime(duration - elapsed)}`)
 			.trim();
 	}
 
@@ -270,14 +491,15 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 			st.imageDims = this.getImageSize(buffer, blob.type) ?? { w: CANVAS_SIZE, h: CANVAS_SIZE };
 		}
 
-		// テキスト(テンプレートやアーティスト名は曲中でも変わり得るので毎回再評価)
+		// テキスト(テンプレートやアーティスト名は曲中でも変わり得るので毎回再評価)。
+		// {elapsed} などを使うと毎秒変わるため、スクロール位置は曲が変わった時だけ戻す。
 		if (settings.showText) {
 			const text = this.formatTemplate(settings.textTemplate, songInfo);
 			if (text !== st.text) {
+				const style = resolveTextStyle(settings);
 				st.text = text;
-				st.textWidth = this.measureText(text, FONT_SIZE);
+				st.textWidth = measureText(text, style.size, style.weight >= 600 ? 0.55 : 0.5);
 				st.needsScroll = st.textWidth > AVAIL_WIDTH;
-				st.scrollOffset = 0;
 			}
 		} else {
 			st.text = "";
@@ -287,6 +509,62 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 		// 再生位置(進捗バー用)
 		st.duration = Number(songInfo.songDuration) || 0;
 		st.elapsed = Number(songInfo.elapsedSeconds) || 0;
+	}
+
+	// テキストの帯(位置ごとの背景と、ベースライン)を作る。
+	private buildTextOverlay(st: RenderState<T>, style: TextStyle, bottomReserve: number): { defs: string; overlay: string } {
+		const size = CANVAS_SIZE;
+		const fs = style.size;
+		const shade = style.dark ? "white" : "black";
+		let defs = "";
+		let overlay = "";
+		let baseline: number;
+
+		if (style.position === "top") {
+			baseline = Math.round(7 + fs * 0.8);
+			const bandBottom = baseline + Math.round(fs * 0.3 + 11);
+			if (style.background) {
+				defs = `<linearGradient id="grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade}" stop-opacity="0.9"/><stop offset="0.45" stop-color="${shade}" stop-opacity="0.55"/><stop offset="1" stop-color="${shade}" stop-opacity="0"/></linearGradient>`;
+				overlay += `<rect x="0" y="0" width="${size}" height="${bandBottom}" fill="url(#grad)"/>`;
+			}
+		} else if (style.position === "middle") {
+			baseline = Math.round(size / 2 + fs * 0.35);
+			if (style.background) {
+				const bandTop = Math.round(size / 2 - fs * 0.75 - 4);
+				overlay += `<rect x="0" y="${bandTop}" width="${size}" height="${Math.round(fs * 1.5 + 8)}" fill="${shade}" fill-opacity="0.55"/>`;
+			}
+		} else {
+			// 下部: 進捗バーを出す分だけテキストを上に逃がす
+			baseline = size - bottomReserve - Math.round(fs * 0.3 + 6);
+			const barTop = baseline - fs - 11;
+			if (style.background) {
+				// 下部に半透明グラデーション帯を敷いて可読性を確保(なめらかにフェード)
+				defs = `<linearGradient id="grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade}" stop-opacity="0"/><stop offset="0.55" stop-color="${shade}" stop-opacity="0.55"/><stop offset="1" stop-color="${shade}" stop-opacity="0.9"/></linearGradient>`;
+				overlay += `<rect x="0" y="${barTop}" width="${size}" height="${size - barTop}" fill="url(#grad)"/>`;
+			}
+		}
+
+		const textEsc = escapeXml(st.text);
+		// 縁取り(stroke)は細い字画を内側から削ってしまうため使わない。
+		// 代わりに同じ文字を半透明で少し下にずらして敷き、影で輪郭を出す。
+		const common = `font-family="${escapeXml(style.family)}" font-size="${fs}" font-weight="${style.weight}" letter-spacing="0.2"`;
+		const shadow = style.dark ? "#ffffff" : "#000000";
+		const emit = (x: number, anchor: string): string => {
+			const xs = x.toFixed(1);
+			return `<text x="${(x + 1).toFixed(1)}" y="${baseline + 1}" text-anchor="${anchor}" ${common} fill="${shadow}" fill-opacity="0.6">${textEsc}</text>`
+				+ `<text x="${xs}" y="${baseline}" text-anchor="${anchor}" ${common} fill="${style.color}">${textEsc}</text>`;
+		};
+		if (st.needsScroll) {
+			const loop = st.textWidth + SCROLL_GAP;
+			const off = st.scrollOffset % loop;
+			const x1 = PAD_X - off;
+			const x2 = x1 + loop;
+			overlay += emit(x1, "start");
+			overlay += emit(x2, "start");
+		} else {
+			overlay += emit(size / 2, "middle");
+		}
+		return { defs, overlay };
 	}
 
 	// カバー画像(+任意のテキスト)から data URI を生成する。
@@ -305,38 +583,13 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 		const dy = (size - dh) / 2;
 
 		const showProgress = !!st.settings.showProgress;
-		// 進捗バーを出す分だけテキストを上に逃がす
 		const bottomReserve = showProgress ? PROGRESS_HEIGHT : 0;
 
 		let defs = "";
 		let overlay = "";
 
 		if (showText && st.text) {
-			const barTop = size - (FONT_SIZE + 24) - bottomReserve;
-			const baseline = size - 13 - bottomReserve;
-			const textEsc = this.escapeXml(st.text);
-			// 下部に黒の半透明グラデーション帯を敷いて可読性を確保(なめらかにフェード)
-			defs = `<linearGradient id="grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="black" stop-opacity="0"/><stop offset="0.55" stop-color="black" stop-opacity="0.55"/><stop offset="1" stop-color="black" stop-opacity="0.9"/></linearGradient>`;
-			overlay += `<rect x="0" y="${barTop}" width="${size}" height="${size - barTop}" fill="url(#grad)"/>`;
-
-			// 縁取り(stroke)は細い字画を内側から削ってしまうため使わない。
-			// 代わりに同じ文字を黒半透明で少し下にずらして敷き、影で輪郭を出す。
-			const common = `font-family="${FONT_FAMILY}" font-size="${FONT_SIZE}" font-weight="${FONT_WEIGHT}" letter-spacing="0.2"`;
-			const emit = (x: number, anchor: string): string => {
-				const xs = x.toFixed(1);
-				return `<text x="${(x + 1).toFixed(1)}" y="${baseline + 1}" text-anchor="${anchor}" ${common} fill="#000000" fill-opacity="0.6">${textEsc}</text>`
-					+ `<text x="${xs}" y="${baseline}" text-anchor="${anchor}" ${common} fill="${TEXT_COLOR}">${textEsc}</text>`;
-			};
-			if (st.needsScroll) {
-				const loop = st.textWidth + SCROLL_GAP;
-				const off = st.scrollOffset % loop;
-				const x1 = PAD_X - off;
-				const x2 = x1 + loop;
-				overlay += emit(x1, "start");
-				overlay += emit(x2, "start");
-			} else {
-				overlay += emit(size / 2, "middle");
-			}
+			({ defs, overlay } = this.buildTextOverlay(st, resolveTextStyle(st.settings), bottomReserve));
 		}
 
 		// 進捗バー(最前面・最下部)。経過分を緑、未経過をトラック色で描く。
@@ -393,11 +646,21 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 			st.showingWarning = false;
 			// 一旦クリアしておけば、アートワーク表示ならこの後の描画が、
 			// 非表示ならステート画像がそのまま出る。
-			ev.action.setImage(undefined);
-			st.showingBlank = true;
-			st.lastImageSent = undefined;
+			st.showingBlank = false;
+			this.showIdle(ev.action, st);
 		}
 		return false;
+	}
+
+	// アートワークを出さない時の表示。idleImage が無ければステート画像に戻す。
+	private showIdle(target: ImageTarget, st: RenderState<T>): void {
+		if (st.showingBlank && st.idleSent === st.idleImage) {
+			return;
+		}
+		target.setImage(st.idleImage);
+		st.showingBlank = true;
+		st.idleSent = st.idleImage;
+		st.lastImageSent = undefined;
 	}
 
 	// スクロール要否に合わせてループ間隔を切り替える(必要な時だけ高頻度描画)。
@@ -437,7 +700,7 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 			st.lastPollAt = now;
 			st.polling = true;
 			try {
-				await this.onPoll(ev, this.getPort(settings));
+				await this.onPoll(ev, this.getPort(settings), feed, settings);
 			} catch (error) {
 				streamDeck.logger.debug("Failed to poll player state", error);
 			} finally {
@@ -445,13 +708,19 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 			}
 		}
 
+		// 一時メッセージを出している間は描画しない。終わったら通常の表示を出し直す。
+		if (st.flashUntil !== undefined) {
+			if (now < st.flashUntil) {
+				return;
+			}
+			st.flashUntil = undefined;
+			st.showingBlank = false;
+			st.lastImageSent = undefined;
+		}
+
 		// アートワーク非表示: 一度だけ画像をクリアして終了(以降はステート画像が見える)
 		if (!settings.showArtwork) {
-			if (!st.showingBlank) {
-				ev.action.setImage(undefined);
-				st.showingBlank = true;
-				st.lastImageSent = undefined;
-			}
+			this.showIdle(ev.action, st);
 			return;
 		}
 
@@ -472,11 +741,7 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 
 		// 一時停止 / 画像なし は空表示
 		if (st.isPaused || !st.imageDataUri) {
-			if (!st.showingBlank) {
-				ev.action.setImage(undefined);
-				st.showingBlank = true;
-				st.lastImageSent = undefined;
-			}
+			this.showIdle(ev.action, st);
 			return;
 		}
 		st.showingBlank = false;

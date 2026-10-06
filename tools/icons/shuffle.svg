@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Shuffle: two crossing arrows -->
+  <g fill="none" stroke="#fff" stroke-width="24" stroke-linecap="round">
+    <path d="M24 80 H68 C118 80 138 176 188 176 H206"/>
+    <path d="M24 176 H68 C118 176 138 80 188 80 H206"/>
+  </g>
+  <g fill="#fff" stroke="#fff" stroke-width="8" stroke-linejoin="round">
+    <path d="M198 48 L238 80 L198 112 Z"/>
+    <path d="M198 144 L238 176 L198 208 Z"/>
+  </g>
+</svg>

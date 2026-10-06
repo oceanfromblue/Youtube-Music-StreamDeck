@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Repeat: loop of two arrows -->
+  <g fill="none" stroke="#fff" stroke-width="24" stroke-linecap="round">
+    <path d="M44 128 V104 a32 32 0 0 1 32-32 H200"/>
+    <path d="M212 128 V152 a32 32 0 0 1-32 32 H56"/>
+  </g>
+  <g fill="#fff" stroke="#fff" stroke-width="8" stroke-linejoin="round">
+    <path d="M196 40 L236 72 L196 104 Z"/>
+    <path d="M60 152 L20 184 L60 216 Z"/>
+  </g>
+</svg>

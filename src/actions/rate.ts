@@ -1,4 +1,4 @@
-import { action, Action, KeyDownEvent, streamDeck, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
+import { action, Action, KeyDownEvent, streamDeck, WillAppearEvent } from "@elgato/streamdeck";
 import { BaseAction, BaseSettings } from "./base-action";
 
 // pear-desktop の GET /like-state が返す評価。
@@ -9,9 +9,6 @@ type LikeState = "LIKE" | "DISLIKE" | "INDIFFERENT";
 abstract class RateAction extends BaseAction<BaseSettings> {
 	protected abstract readonly rating: LikeState;
 	protected abstract readonly endpoint: string;
-
-	// context ごとに直近で送ったステート。変化した時だけ setState する。
-	private sentStates = new Map<string, 0 | 1>();
 
 	// 評価を反映し続けるため、アートワーク非表示でもポーリングする。
 	protected override get needsPolling(): boolean {
@@ -33,24 +30,14 @@ abstract class RateAction extends BaseAction<BaseSettings> {
 		await this.syncState(ev.action, port);
 	}
 
-	override async onWillDisappear(ev: WillDisappearEvent<BaseSettings>): Promise<void> {
-		this.sentStates.delete(ev.action.id);
-		await super.onWillDisappear(ev);
-	}
-
-	// /like-state を見て評価が一致していれば state 1 に切り替える。
+	// /like-state を見て評価が一致していれば state 1 に切り替える(変化した時だけ送る)。
 	// エンドポイントが無い古いアプリでは get() が null を返すので通常表示のままになる。
 	private async syncState(target: Action<BaseSettings>, port: string): Promise<void> {
 		if (!target.isKey()) {
 			return;
 		}
 		const res = await this.get(port, "/like-state");
-		const state: 0 | 1 = res?.state === this.rating ? 1 : 0;
-		if (this.sentStates.get(target.id) === state) {
-			return;
-		}
-		this.sentStates.set(target.id, state);
-		await target.setState(state);
+		await this.applyState(target, res?.state === this.rating ? 1 : 0);
 	}
 }
 

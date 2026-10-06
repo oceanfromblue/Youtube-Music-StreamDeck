@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head lang="en">
-    <title>Get Playlist Settings</title>
+    <title>Add Playlist to Queue Settings</title>
     <meta charset="utf-8" />
     <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
 </head>
 <body>
     <sdpi-item label="Port">
-        <sdpi-textfield globalsetting="port" placeholder="26538" pattern="\d*"></sdpi-textfield>
+        <sdpi-textfield setting="port" global placeholder="26538" pattern="\d*"></sdpi-textfield>
     </sdpi-item>
-    <sdpi-item label="Playlist ID">
-        <sdpi-textfield setting="playlistId" placeholder="Enter Playlist ID" required></sdpi-textfield>
+    <sdpi-item label="Playlist">
+        <sdpi-textfield setting="playlistId" placeholder="Playlist link or ID" required></sdpi-textfield>
     </sdpi-item>
     <sdpi-item label="Shuffle">
         <sdpi-checkbox setting="shuffle" label="Shuffle Playlist"></sdpi-checkbox>
@@ -22,43 +22,8 @@
             <option value="next">Play next (keep the queue)</option>
         </sdpi-select>
     </sdpi-item>
-    <sdpi-item label="Show Now-playing Artwork">
-        <sdpi-checkbox setting="showArtwork" label="Show Now-playing Artwork"></sdpi-checkbox>
-    </sdpi-item>
-    <sdpi-item label="Show Track Info">
-        <sdpi-checkbox setting="showText" id="showText" label="Overlay text on artwork"></sdpi-checkbox>
-    </sdpi-item>
-    <sdpi-item label="Text Template">
-        <sdpi-textfield setting="textTemplate" id="textTemplate" placeholder="{title} - {artist}"></sdpi-textfield>
-    </sdpi-item>
-    <sdpi-item label="Show Progress Bar">
-        <sdpi-checkbox setting="showProgress" label="Show playback progress"></sdpi-checkbox>
-    </sdpi-item>
-    <script>
-        (function () {
-            function readSettings(p) {
-                if (!p) return {};
-                if (p.settings) return p.settings;
-                if (p.payload && p.payload.settings) return p.payload.settings;
-                return {};
-            }
-            function init() {
-                if (!window.SDPIComponents) { setTimeout(init, 50); return; }
-                const tpl = document.getElementById('textTemplate');
-                const cb = document.getElementById('showText');
-                function sync(on) {
-                    if (on) { tpl.removeAttribute('disabled'); }
-                    else { tpl.setAttribute('disabled', ''); }
-                }
-                const client = SDPIComponents.streamDeckClient;
-                client.getSettings().then(p => sync(!!readSettings(p).showText));
-                client.didReceiveSettings.subscribe(p => sync(!!readSettings(p).showText));
-                cb.addEventListener('change', () => sync(!!cb.value));
-                cb.addEventListener('valuechange', () => sync(!!cb.value));
-            }
-            init();
-        })();
-    </script>
+    <div id="artwork-options"></div>
+    <script src="artwork-options.js"></script>
     <script src="setup-link.js"></script>
 </body>
 </html>

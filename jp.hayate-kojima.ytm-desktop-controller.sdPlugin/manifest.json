@@ -1,6 +1,6 @@
 {
 	"Name": "ytm-desktop controller",
-	"Version": "0.3.1.0",
+	"Version": "0.4.0.0",
 	"Author": "Hayate Kojima",
 	"Actions": [
 		{
@@ -20,17 +20,22 @@
 			]
 		},
 		{
-			"Name": "Add Track to Queue",
-			"UUID": "jp.hayate-kojima.ytm-desktop-controller.add-track-to-queue",
-			"Icon": "imgs/actions/add-track/icon",
-			"Tooltip": "Add track items to queue",
-			"PropertyInspectorPath": "ui/add-track-to-queue.html",
+			"Name": "Add to Playlist",
+			"UUID": "jp.hayate-kojima.ytm-desktop-controller.add-to-playlist",
+			"Icon": "imgs/actions/add-to-playlist/icon",
+			"Tooltip": "Add the current song to one of your playlists",
+			"PropertyInspectorPath": "ui/add-to-playlist.html",
 			"Controllers": [
 				"Keypad"
 			],
+			"DisableAutomaticStates": true,
 			"States": [
 				{
-					"Image": "imgs/actions/add-track/key",
+					"Image": "imgs/actions/add-to-playlist/key",
+					"TitleAlignment": "middle"
+				},
+				{
+					"Image": "imgs/actions/add-to-playlist/key-active",
 					"TitleAlignment": "middle"
 				}
 			]
@@ -126,6 +131,48 @@
 			]
 		},
 		{
+			"Name": "Shuffle",
+			"UUID": "jp.hayate-kojima.ytm-desktop-controller.shuffle",
+			"Icon": "imgs/actions/shuffle/icon",
+			"Tooltip": "Toggle shuffle",
+			"PropertyInspectorPath": "ui/rate.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"States": [
+				{
+					"Image": "imgs/actions/shuffle/key",
+					"TitleAlignment": "middle"
+				},
+				{
+					"Image": "imgs/actions/shuffle/key-active",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Repeat",
+			"UUID": "jp.hayate-kojima.ytm-desktop-controller.repeat",
+			"Icon": "imgs/actions/repeat/icon",
+			"Tooltip": "Switch repeat mode (off / all / one)",
+			"PropertyInspectorPath": "ui/rate.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"States": [
+				{
+					"Image": "imgs/actions/repeat/key",
+					"TitleAlignment": "middle"
+				},
+				{
+					"Image": "imgs/actions/repeat/key-active",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
 			"Name": "Artwork Preview",
 			"UUID": "jp.hayate-kojima.ytm-desktop-controller.artwork",
 			"Icon": "imgs/actions/artwork/icon",
@@ -185,6 +232,109 @@
 			"States": [
 				{
 					"Image": "imgs/actions/set-volume/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Volume Up",
+			"UUID": "jp.hayate-kojima.ytm-desktop-controller.volume-up",
+			"Icon": "imgs/actions/volume-up/icon",
+			"Tooltip": "Raise the volume (hold to repeat)",
+			"PropertyInspectorPath": "ui/volume-step.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/volume-up/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Volume Down",
+			"UUID": "jp.hayate-kojima.ytm-desktop-controller.volume-down",
+			"Icon": "imgs/actions/volume-down/icon",
+			"Tooltip": "Lower the volume (hold to repeat)",
+			"PropertyInspectorPath": "ui/volume-step.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/volume-down/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Toggle Mute",
+			"UUID": "jp.hayate-kojima.ytm-desktop-controller.toggle-mute",
+			"Icon": "imgs/actions/toggle-mute/icon",
+			"Tooltip": "Mute / unmute",
+			"PropertyInspectorPath": "ui/rate.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"States": [
+				{
+					"Image": "imgs/actions/toggle-mute/key",
+					"TitleAlignment": "middle"
+				},
+				{
+					"Image": "imgs/actions/toggle-mute/key-active",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Volume Dial",
+			"UUID": "jp.hayate-kojima.ytm-desktop-controller.volume-dial",
+			"Icon": "imgs/actions/volume-dial/icon",
+			"Tooltip": "Rotate to change the volume, press to mute",
+			"PropertyInspectorPath": "ui/dial.html",
+			"Controllers": [
+				"Encoder"
+			],
+			"Encoder": {
+				"layout": "$B1",
+				"Icon": "imgs/actions/volume-dial/encoder",
+				"TriggerDescription": {
+					"Rotate": "Volume",
+					"Push": "Mute / unmute",
+					"Touch": "Mute / unmute"
+				}
+			},
+			"States": [
+				{
+					"Image": "imgs/actions/volume-dial/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Seek Dial",
+			"UUID": "jp.hayate-kojima.ytm-desktop-controller.seek-dial",
+			"Icon": "imgs/actions/seek-dial/icon",
+			"Tooltip": "Rotate to seek, press to play / pause",
+			"PropertyInspectorPath": "ui/dial.html",
+			"Controllers": [
+				"Encoder"
+			],
+			"Encoder": {
+				"layout": "$B1",
+				"Icon": "imgs/actions/seek-dial/encoder",
+				"TriggerDescription": {
+					"Rotate": "Seek",
+					"Push": "Play / pause",
+					"Touch": "Play / pause"
+				}
+			},
+			"States": [
+				{
+					"Image": "imgs/actions/seek-dial/key",
 					"TitleAlignment": "middle"
 				}
 			]

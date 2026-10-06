@@ -9,7 +9,10 @@
  *   icon@2x.png  (40x40)
  *   key.png      (72x72)   grey bg + pink circle + glyph (shown on the key)
  *   key@2x.png   (144x144)
- *   key-active[@2x].png     glyph on a full-bleed "on" colour - like and dislike only
+ *   key-<state>[@2x].png    glyph on a full-bleed colour - extra key states (see STATES)
+ *   encoder[@2x].png (72x72) circle + glyph on transparent - dial actions only (see ENCODERS)
+ *
+ * tools/icons/states/<name>.svg  alternative glyphs used by STATES (not actions themselves)
  *
  * tools/icons/logo.svg      ->  imgs/plugin/
  *   category-icon.png / @2x (28 / 56)    white glyph, transparent bg
@@ -32,12 +35,24 @@ const CIRCLE_PCT = 66; // circle diameter as % of the canvas
 const GLYPH_PCT = 52; // glyph size as % of the circle diameter
 const RENDER = 1024; // rasterisation size of the sources
 
-// Actions with an "on" state: <action>/key-active[@2x].png, the glyph on a full-bleed colour
-// instead of the circle, so the state reads at a glance rather than by hue alone.
-const ACTIVE = {
-	like: "#D0618F", // muted pink
-	dislike: "#4F7FAE", // muted blue
+// Extra key states: <action>/key-<name>[@2x].png, the glyph on a full-bleed colour instead of
+// the circle, so the state reads at a glance rather than by hue alone. `glyph` swaps in a
+// different source from tools/icons/states/ for that state.
+const GREEN = "#3E9B63"; // muted green: "on"
+const STATES = {
+	like: [{ name: "active", fill: "#D0618F" }], // muted pink
+	dislike: [{ name: "active", fill: "#4F7FAE" }], // muted blue
+	"add-to-playlist": [{ name: "active", fill: GREEN, glyph: "add-to-playlist-active" }],
+	"toggle-mute": [{ name: "active", fill: "#C0504D" }], // muted red
+	shuffle: [{ name: "active", fill: GREEN }],
+	repeat: [
+		{ name: "active", fill: GREEN },
+		{ name: "one", fill: GREEN, glyph: "repeat-one" },
+	],
 };
+
+// Dial (Stream Deck +) actions: also write encoder[@2x].png for the dial in the Stream Deck app.
+const ENCODERS = new Set(["volume-dial", "seek-dial"]);
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = join(ROOT, "tools", "icons");
@@ -70,12 +85,12 @@ async function writeIcon(glyph, size, out) {
  * "on" look: the colour covers the whole key and the circle is dropped. The glyph keeps
  * the same size either way, so it does not jump when the state flips.
  */
-async function writeKey(glyph, size, out, { circlePct = CIRCLE_PCT, glyphPct = GLYPH_PCT, circle = PINK, fill } = {}) {
+async function writeKey(glyph, size, out, { circlePct = CIRCLE_PCT, glyphPct = GLYPH_PCT, circle = PINK, fill, background = GREY } = {}) {
 	const box = Math.round((size * circlePct * glyphPct) / 10000);
 	const img = await sharp(glyph).resize(box, box, { fit: "inside" }).toBuffer();
 	const bg = Buffer.from(
 		`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">` +
-			`<rect width="${size}" height="${size}" fill="${fill ?? GREY}"/>` +
+			`<rect width="${size}" height="${size}" fill="${fill ?? background}"/>` +
 			(fill ? "" : `<circle cx="${size / 2}" cy="${size / 2}" r="${(size * circlePct) / 200}" fill="${circle}"/>`) +
 			`</svg>`,
 	);
@@ -90,11 +105,18 @@ async function buildAction(name, file) {
 	await writeIcon(glyph, 40, join(dir, "icon@2x.png"));
 	await writeKey(glyph, 72, join(dir, "key.png"));
 	await writeKey(glyph, 144, join(dir, "key@2x.png"));
-	if (ACTIVE[name]) {
-		await writeKey(glyph, 72, join(dir, "key-active.png"), { fill: ACTIVE[name] });
-		await writeKey(glyph, 144, join(dir, "key-active@2x.png"), { fill: ACTIVE[name] });
+	const states = STATES[name] ?? [];
+	for (const state of states) {
+		const stateGlyph = state.glyph ? await rasterize(join(SRC, "states", `${state.glyph}.svg`)) : glyph;
+		await writeKey(stateGlyph, 72, join(dir, `key-${state.name}.png`), { fill: state.fill });
+		await writeKey(stateGlyph, 144, join(dir, `key-${state.name}@2x.png`), { fill: state.fill });
 	}
-	console.log(`  actions/${name}${ACTIVE[name] ? " (+ active)" : ""}`);
+	if (ENCODERS.has(name)) {
+		await writeKey(glyph, 72, join(dir, "encoder.png"), { circlePct: 90, background: "none" });
+		await writeKey(glyph, 144, join(dir, "encoder@2x.png"), { circlePct: 90, background: "none" });
+	}
+	const extras = [...states.map((s) => s.name), ...(ENCODERS.has(name) ? ["encoder"] : [])];
+	console.log(`  actions/${name}${extras.length ? ` (+ ${extras.join(", ")})` : ""}`);
 }
 
 async function buildPlugin(file) {

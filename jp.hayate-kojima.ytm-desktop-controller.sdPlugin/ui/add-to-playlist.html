@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <title>Add to Playlist Settings</title>
+    <meta charset="utf-8" />
+    <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+    <style>
+        .sd-section {
+            margin: 14px 8px 4px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            color: #d8d8d8;
+            font-family: "Segoe UI", Arial, Roboto, Helvetica, sans-serif;
+            font-size: 9pt;
+            font-weight: 600;
+        }
+        .sd-hint {
+            margin: 0 8px 6px 104px;
+            color: #9a9a9a;
+            font-family: "Segoe UI", Arial, Roboto, Helvetica, sans-serif;
+            font-size: 8pt;
+            line-height: 1.4;
+        }
+        .sd-hint a {
+            color: #8ab4f8;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <sdpi-item label="Port">
+        <sdpi-textfield setting="port" global placeholder="26538" pattern="\d*"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Playlist">
+        <sdpi-select setting="playlistId" id="playlist" datasource="getPlaylists" show-refresh hot-reload
+            label-setting="playlistName" placeholder="Choose a playlist" loading="Loading playlists…"></sdpi-select>
+    </sdpi-item>
+    <sdpi-item label="Or Link / ID">
+        <sdpi-textfield setting="customPlaylist" placeholder="Playlist link (optional)"></sdpi-textfield>
+    </sdpi-item>
+    <div class="sd-hint">Used instead of the list above when filled in.</div>
+    <sdpi-item label="Duplicates">
+        <sdpi-checkbox setting="allowDuplicates" label="Add even if it is already in the playlist"></sdpi-checkbox>
+    </sdpi-item>
+
+    <div class="sd-section">YouTube Music account (shared by every key)</div>
+    <sdpi-item label="Cookie">
+        <sdpi-password setting="ytmCookie" global id="cookie" placeholder="Paste the cookie of music.youtube.com"></sdpi-password>
+    </sdpi-item>
+    <div class="sd-hint">
+        pear-desktop's API cannot edit playlists, so this key talks to YouTube Music with your login cookie.
+        It stays on this PC and is not exported with profiles. <a id="cookie-guide">How to get it</a>
+    </div>
+    <sdpi-item label="Account No.">
+        <sdpi-textfield setting="ytmAuthUser" global placeholder="0" pattern="\d*"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Brand Account">
+        <sdpi-textfield setting="ytmBrandId" global placeholder="Brand account ID (optional)"></sdpi-textfield>
+    </sdpi-item>
+
+    <script>
+        (function () {
+            const GUIDE_URL = "https://github.com/oceanfromblue/Youtube-Music-StreamDeck#add-to-playlist";
+            function init() {
+                if (!window.SDPIComponents) { setTimeout(init, 50); return; }
+                const client = SDPIComponents.streamDeckClient;
+                document.getElementById("cookie-guide").addEventListener("click", event => {
+                    event.preventDefault();
+                    client.send("openUrl", { url: GUIDE_URL });
+                });
+
+                // Cookie を貼り替えたら(保存とプラグインへの反映を待ってから)一覧を読み直す。
+                // 読み込み時に入る値では読み直さない。
+                const cookie = document.getElementById("cookie");
+                const playlist = document.getElementById("playlist");
+                let ready = false;
+                let timer;
+                client.getGlobalSettings().then(() => setTimeout(() => { ready = true; }, 1000));
+                cookie.addEventListener("valuechange", () => {
+                    if (!ready) return;
+                    clearTimeout(timer);
+                    timer = setTimeout(() => playlist.refresh(), 1500);
+                });
+            }
+            init();
+        })();
+    </script>
+    <script src="setup-link.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Seek Dial: gauge arc around a fast-forward mark -->
+  <path d="M60.1 203.9 A96 96 0 1 1 195.9 203.9" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round"/>
+  <g fill="#fff" stroke="#fff" stroke-width="8" stroke-linejoin="round">
+    <path d="M92 108 L126 136 L92 164 Z"/>
+    <path d="M130 108 L164 136 L130 164 Z"/>
+  </g>
+</svg>

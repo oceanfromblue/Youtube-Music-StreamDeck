@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <title>Volume Step Settings</title>
+    <meta charset="utf-8" />
+    <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+</head>
+<body>
+    <sdpi-item label="Port">
+        <sdpi-textfield setting="port" global placeholder="26538" pattern="\d*"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Step">
+        <sdpi-select setting="step" default="10">
+            <option value="1">1%</option>
+            <option value="2">2%</option>
+            <option value="5">5%</option>
+            <option value="10">10% (default)</option>
+            <option value="15">15%</option>
+            <option value="20">20%</option>
+            <option value="25">25%</option>
+        </sdpi-select>
+    </sdpi-item>
+    <script src="setup-link.js"></script>
+</body>
+</html>

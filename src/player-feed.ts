@@ -4,11 +4,18 @@ import WebSocket from "ws";
 // API Server (pear-desktop) の WebSocket が送ってくるメッセージ。
 // 参照: src/plugins/api-server/backend/routes/websocket.ts
 type FeedMessage = {
-	type: "PLAYER_INFO" | "VIDEO_CHANGED" | "PLAYER_STATE_CHANGED" | "POSITION_CHANGED" | string;
+	type: "PLAYER_INFO" | "VIDEO_CHANGED" | "PLAYER_STATE_CHANGED" | "POSITION_CHANGED"
+		| "VOLUME_CHANGED" | "REPEAT_CHANGED" | "SHUFFLE_CHANGED" | string;
 	song?: SongInfo;
 	isPlaying?: boolean;
 	position?: number;
+	volume?: number;
+	muted?: boolean;
+	repeat?: RepeatMode;
+	shuffle?: boolean;
 };
+
+export type RepeatMode = "NONE" | "ALL" | "ONE";
 
 // GET /song と同じ形の曲情報(必要なものだけ)。
 export type SongInfo = {
@@ -35,6 +42,12 @@ class PlayerFeed {
 	private song: SongInfo | null = null;
 	private isPaused = true;
 	private position = 0;
+
+	// 音量・ミュート・リピート・シャッフル。WebSocket から届くまでは undefined(不明)。
+	volume?: number;
+	muted?: boolean;
+	repeat?: RepeatMode;
+	shuffle?: boolean;
 
 	// WebSocket が繋がっていて曲情報を配れる状態か。
 	live = false;
@@ -94,6 +107,7 @@ class PlayerFeed {
 		socket.on("close", () => {
 			this.live = false;
 			this.socket = undefined;
+			this.volume = this.muted = this.repeat = this.shuffle = undefined;
 			if (this.subscribers > 0 && !this.reconnect) {
 				// WebSocket が駄目でも API 自体は生きているかもしれないので確認しておく。
 				void this.probe();
@@ -110,6 +124,7 @@ class PlayerFeed {
 		this.reconnect = undefined;
 		this.live = false;
 		this.reachable = false;
+		this.volume = this.muted = this.repeat = this.shuffle = undefined;
 		this.socket?.close();
 		this.socket = undefined;
 	}
@@ -131,6 +146,20 @@ class PlayerFeed {
 			message = JSON.parse(raw);
 		} catch {
 			return;
+		}
+
+		// PLAYER_INFO は全部入り、*_CHANGED はそれぞれの値だけを持ってくる。
+		if (typeof message.volume === "number") {
+			this.volume = message.volume;
+		}
+		if (typeof message.muted === "boolean") {
+			this.muted = message.muted;
+		}
+		if (message.repeat === "NONE" || message.repeat === "ALL" || message.repeat === "ONE") {
+			this.repeat = message.repeat;
+		}
+		if (typeof message.shuffle === "boolean") {
+			this.shuffle = message.shuffle;
 		}
 
 		switch (message.type) {

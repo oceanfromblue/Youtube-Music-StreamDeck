@@ -39,8 +39,12 @@
         <sdpi-textfield setting="customPlaylist" placeholder="Playlist link (optional)"></sdpi-textfield>
     </sdpi-item>
     <div class="sd-hint">Used instead of the list above when filled in.</div>
-    <sdpi-item label="Duplicates">
-        <sdpi-checkbox setting="allowDuplicates" label="Add even if it is already in the playlist"></sdpi-checkbox>
+    <sdpi-item label="If already added">
+        <sdpi-select setting="whenExisting" default="remove">
+            <option value="remove">Remove it from the playlist</option>
+            <option value="keep">Do nothing</option>
+            <option value="add">Add it again</option>
+        </sdpi-select>
     </sdpi-item>
 
     <div class="sd-section">YouTube Music account (shared by every key)</div>

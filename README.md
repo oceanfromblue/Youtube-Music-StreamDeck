@@ -122,14 +122,15 @@ by one, so 200 songs take around 15 seconds — playback starts as soon as the f
 | `Play next (keep the queue)` | Inserts right after the current song and plays it immediately. The rest of the queue is kept. |
 
 ### Add to Playlist
-Add the song that is playing now to one of your own YouTube Music playlists. The key turns green while the current song is
-already in that playlist, and shows `Added` / `Already added` after a press.
+Add the song that is playing now to one of your own YouTube Music playlists — or, if it is already in there, remove it
+(press once to add, again to remove). The key turns green while the current song is in that playlist, and shows `Added` /
+`Removed` after a press. A song counts as "in the playlist" whether it was saved as the song or as its music video.
 
 | Argument | Description |
 |---|---|
 | `Playlist` | Pick one of your playlists (the list is loaded from YouTube Music; use the refresh button after creating a new one). |
 | `Or Link / ID` | Paste a playlist link or ID instead. Used when filled in. |
-| `Duplicates` | Add the song even if it is already in the playlist. Off by default (the key just shows `Already added`). |
+| `If already added` | What a press does when the song is already in the playlist: `Remove it from the playlist` (default), `Do nothing`, or `Add it again`. |
 | `Cookie` | Your YouTube Music login cookie — see below. Shared by every key. |
 | `Account No.` | Only if you are signed in to several Google accounts in that browser: the account number (`0` for the first, `1` for the second, …). |
 | `Brand Account` | Only for a brand account channel: its ID. |

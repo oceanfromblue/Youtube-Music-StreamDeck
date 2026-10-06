@@ -696,7 +696,8 @@ export abstract class BaseAction<T extends BaseSettings> extends SingletonAction
 
 		// WebSocket にイベントが無いもの(いいね状態など)は1秒ごとに取りに行く。
 		// アートワーク非表示でもキーの状態は更新し続ける。
-		if (this.needsPolling && !st.polling && now - st.lastPollAt >= DATA_INTERVAL_MS) {
+		// tick 自体が約1秒間隔なので、タイマーの揺れで1回おきにならないよう少し余裕を持たせる。
+		if (this.needsPolling && !st.polling && now - st.lastPollAt >= DATA_INTERVAL_MS - 100) {
 			st.lastPollAt = now;
 			st.polling = true;
 			try {

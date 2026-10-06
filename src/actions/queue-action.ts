@@ -35,7 +35,7 @@ type QueueState = {
 };
 
 // キュー項目の videoId 一覧(音声版/動画版の切り替え先も含む)と、再生中かどうか。
-function itemInfo(item: any): { ids: Set<string>; selected: boolean } {
+export function itemInfo(item: any): { ids: Set<string>; selected: boolean } {
 	const wrapper = item?.playlistPanelVideoWrapperRenderer;
 	const primary = item?.playlistPanelVideoRenderer ?? wrapper?.primaryRenderer?.playlistPanelVideoRenderer;
 	const ids = new Set<string>();

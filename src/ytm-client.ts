@@ -12,7 +12,7 @@ const API_BASE = `${ORIGIN}/youtubei/v1`;
 const CLIENT_VERSION = "1.20250929.01.00";
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 const TIMEOUT_MS = 15000;
-const MAX_CONTINUATIONS = 20;
+const MAX_CONTINUATIONS = 50; // 1ページ約100曲
 
 // 「いいねした曲」などシステムのリストは edit_playlist で足せないので一覧から外す。
 const SYSTEM_PLAYLISTS = new Set(["LM", "SE", "WL"]);
@@ -31,6 +31,12 @@ export type YtmPlaylist = {
 };
 
 export type AddResult = "added" | "duplicate";
+
+// プレイリストの1行。setVideoId はプレイリスト内での行の ID で、削除に要る。
+export type PlaylistEntry = {
+	videoId: string;
+	setVideoId?: string;
+};
 
 export class YtmError extends Error {
 	constructor(readonly kind: "auth" | "network" | "api", message: string) {
@@ -192,21 +198,27 @@ function queueVideoIds(response: unknown): string[] {
 	return ids;
 }
 
-// プレイリスト画面の行(musicResponsiveListItemRenderer)から videoId を拾う。グレーアウト(再生不可)は除く。
-function shelfVideoIds(response: unknown): { ids: string[]; continuation?: string } {
+// プレイリスト画面の行(musicResponsiveListItemRenderer)と、続きを読むためのトークン。
+function shelfRows(response: unknown): { rows: any[]; continuation?: string } {
 	// 初回はプレイリスト本体の棚だけを見る(関連プレイリストなど他の棚を拾わないように)。
 	const scope = findAll(response, "musicPlaylistShelfRenderer")[0] ?? response;
-	const ids: string[] = [];
-	for (const row of findAll(scope, "musicResponsiveListItemRenderer")) {
-		const videoId = row?.playlistItemData?.videoId;
-		if (videoId && row.musicItemRendererDisplayPolicy !== "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT") {
-			ids.push(videoId);
-		}
-	}
+	const rows = findAll(scope, "musicResponsiveListItemRenderer").filter(row => row?.playlistItemData?.videoId);
 	const token = findAll(scope, "continuationItemRenderer")
 		.map(item => item?.continuationEndpoint?.continuationCommand?.token)
 		.find((t): t is string => typeof t === "string");
-	return { ids, continuation: token };
+	return { rows, continuation: token };
+}
+
+// プレイリスト画面を続きまで全部読む。
+async function browsePlaylistRows(playlistId: string, auth?: YtmAuth): Promise<any[]> {
+	const rows: any[] = [];
+	let page = shelfRows(await call("browse", { browseId: `VL${playlistId}` }, auth));
+	rows.push(...page.rows);
+	for (let i = 0; page.continuation && i < MAX_CONTINUATIONS; i++) {
+		page = shelfRows(await call("browse", { continuation: page.continuation }, auth));
+		rows.push(...page.rows);
+	}
+	return rows;
 }
 
 /**
@@ -229,14 +241,21 @@ export async function fetchPlaylistVideoIds(playlistId: string, auth?: YtmAuth):
 		// 形式が変わった等。browse で再挑戦する。
 	}
 
-	const ids: string[] = [];
-	let page = shelfVideoIds(await call("browse", { browseId: `VL${playlistId}` }, useAuth));
-	ids.push(...page.ids);
-	for (let i = 0; page.continuation && i < MAX_CONTINUATIONS; i++) {
-		page = shelfVideoIds(await call("browse", { continuation: page.continuation }, useAuth));
-		ids.push(...page.ids);
-	}
-	return ids;
+	// グレーアウト(この地域で再生できない曲)は除く
+	return (await browsePlaylistRows(playlistId, useAuth))
+		.filter(row => row.musicItemRendererDisplayPolicy !== "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
+		.map(row => row.playlistItemData.videoId as string);
+}
+
+/**
+ * プレイリストの全行(再生できない曲も含む)。曲が入っているかの判定と、削除に使う。
+ * YouTube Music の「入っているか」フラグや重複スキップは当てにならないため、中身を直接見る。
+ */
+export async function fetchPlaylistEntries(auth: YtmAuth, playlistId: string): Promise<PlaylistEntry[]> {
+	return (await browsePlaylistRows(playlistId, auth)).map(row => ({
+		videoId: row.playlistItemData.videoId,
+		setVideoId: typeof row.playlistItemData.playlistSetVideoId === "string" ? row.playlistItemData.playlistSetVideoId : undefined,
+	}));
 }
 
 /**
@@ -313,13 +332,18 @@ export async function listPlaylists(auth: YtmAuth, videoId?: string): Promise<Yt
 	return playlists;
 }
 
-/** 曲が既にプレイリストに入っているか(判定できなければ undefined)。 */
-export async function playlistContains(auth: YtmAuth, playlistId: string, videoId: string): Promise<boolean | undefined> {
-	const response = await call("playlist/get_add_to_playlist", { videoIds: [videoId] }, auth);
-	const option = findAll(response, "playlistAddToOptionRenderer")
-		.find(o => typeof o?.playlistId === "string" && (parsePlaylistId(o.playlistId) ?? o.playlistId) === playlistId);
-	if (!option || typeof option.containsSelectedVideos !== "string") {
-		return undefined;
+/** プレイリストから行を削除する(setVideoId が分かっている行だけ)。 */
+export async function removeFromPlaylist(auth: YtmAuth, playlistId: string, entries: PlaylistEntry[]): Promise<number> {
+	const actions = entries
+		.filter(entry => entry.setVideoId)
+		.map(entry => ({ action: "ACTION_REMOVE_VIDEO", removedVideoId: entry.videoId, setVideoId: entry.setVideoId }));
+	if (actions.length === 0) {
+		throw new YtmError("api", "Could not find the song's entry in the playlist to remove it.");
 	}
-	return option.containsSelectedVideos === "ALL";
+	const response = await call("browse/edit_playlist", { playlistId, actions }, auth);
+	if (typeof response?.status !== "string" || !response.status.includes("SUCCEEDED")) {
+		const message = findAll(response, "responseText").map(textOf).find(Boolean) ?? response?.status ?? "unknown response";
+		throw new YtmError("api", `Could not remove from the playlist: ${message}`);
+	}
+	return actions.length;
 }

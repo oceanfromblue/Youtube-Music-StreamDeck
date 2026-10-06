@@ -1,0 +1,39 @@
+# v で始まるタグ(例: v0.4.1)を push すると、プラグインをビルドして
+# GitHub Release を作り、.streamDeckPlugin を添付する。
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # タグ v1.2.3 → manifest の Version 1.2.3.0 にして梱包する
+      - name: Pack the plugin
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npx streamdeck pack jp.hayate-kojima.ytm-desktop-controller.sdPlugin --version "$VERSION" --output release --force
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release/jp.hayate-kojima.ytm-desktop-controller.streamDeckPlugin

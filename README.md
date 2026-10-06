@@ -239,6 +239,16 @@ This project is developed by an individual. While I strive to ensure stability, 
 [![Buy Me a Coffee](https://img.shields.io/badge/-buy_me_a%C2%A0coffee-gray?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/yate)
 
 
+### Releasing
+Push a tag that starts with `v` and GitHub Actions builds the plugin, creates a GitHub Release and attaches the
+`.streamDeckPlugin` file (`.github/workflows/release.yml`). The tag becomes the plugin version (`v0.4.1` → `0.4.1.0`), and a
+tag with a hyphen (`v0.5.0-beta.1`) is published as a pre-release.
+
+```
+git tag v0.4.1
+git push origin v0.4.1
+```
+
 ### Icons
 All key images are generated from the SVG sources in `tools/icons/` (a white glyph on a transparent 256x256 canvas):
 
